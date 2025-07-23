@@ -1,0 +1,125 @@
+local ssdg = require "ssdg"
+
+local gen = ssdg.new{
+  lang = "lua",
+  lead = "-",
+  single_line = "--",
+  multi_line = {
+    starting = "--[[",
+    ending = "]]"
+  }
+}
+
+local subs: hashmap(string, string)
+subs["lang"] = gen.conf.lang
+
+gen:add([=[# variant-nelua
+
+Generic types for handling Variant data in nelua
+
+## Warning
+Before using the `Variant` types, you need to [make them local](https://github.com/edubart/nelua-lang/issues/203) or else the compiler will crash
+```:lang:
+local Variant = require "variant"
+local Sum = Variant.Sum
+local Option = Variant.Option
+local Result = Variant.Result
+```
+
+## Requirements
+- [nelua](https://nelua.io/)
+
+## How to install
+Copy `variant.nelua` into your project and require normally
+```:lang:
+local Variant = require "variant"
+```
+
+Or add to your [nlpm](https://github.com/kmafeni04/nlpm) package dependencies
+```lua
+{
+  name = "variant-nelua",
+  repo = "https://github.com/kmafeni04/variant-nelua",
+  version = "COMMIT-HASH-OR-TAG",
+},
+```
+
+## Quick start
+
+```:lang:
+local Variant = require "variant"
+local Sum = Variant.Sum
+local Option = Variant.Option
+local Result = Variant.Result
+
+-- Sum
+local Result = @Sum(record{
+  val: string,
+  err: string
+})
+
+local function test(v: integer): Result
+  local res: Result
+  if v < 10 then
+    res = Result.err("Number less than 10")
+  else
+    res = Result.val("Number greater than 10")
+  end
+  return res
+end
+
+local x = test(9)
+local y = test(10)
+
+print(x:is()) -- err
+print(x:is_err()) -- true
+print(x:get_err()) -- Number less than 10
+
+print(y:is()) -- val
+print(y:is_err()) -- false
+print(y:get_val()) -- Number greater than 10
+
+-- Option
+
+local x: Option(string) = Option.Some("string")
+local y: Option(string) = Option.None()
+local z: Option(string) = "hello"
+
+print(x:is()) -- some
+print(x:is_some()) -- true
+print(x:get()) -- string
+print(y:is()) -- none
+print(y:is_none()) -- true
+-- print(y:get()) -- will crash
+print(z:is()) -- some
+print(z:get()) -- hello
+
+-- Result
+
+local MyResult = @Result(number, string)
+
+local function half(v: integer): MyResult
+  if v < 1 then
+    return MyResult.err("Number less than 1")
+  end
+  return MyResult.ok(v / 2)
+end
+
+local x = half(10)
+local y = half(0)
+
+print(x:is()) -- ok
+print(x:is_ok()) -- true
+print(x:get()) -- 5.0
+print(y:is()) -- err
+print(y:is_err()) -- true
+-- print(y:get()) -- will crash
+```
+
+## Reference
+
+]=], {subs = subs})
+
+gen:add_file("./variant.nelua", { subs = subs })
+
+gen:write_file("README.md")

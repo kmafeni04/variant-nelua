@@ -1,0 +1,241 @@
+require "string"
+
+--- ### Variant
+---`
+local Variant = @record{}
+---`
+
+## local function make_sum(rec)
+  ## static_assert(traits.is_type(rec), "invalid type '%s'", rec)
+  ## static_assert(rec.is_record, "Sum `rec` must be a record type")
+  ##[[
+    local Ts = {}
+    local fields = {}
+    for i, node in ipairs(rec.fields) do
+        fields[node.name] = node
+        table.insert(Ts, i, tostring(node.type))
+    end
+  ]]
+
+  local SumTag = @enum{
+    _init_ = 0
+  }
+  local SumVal = @union{}
+  ##[[
+    local tags = {}
+    local tag_names = {}
+    local i = 1
+    for name, node in pairs(fields) do
+      SumVal.value:add_field(name, node.type)
+      SumTag.value.fields[i] = {
+        index = i,
+        name = name
+      }
+      tags[name] = i
+      tag_names[i] = name
+      i = i + 1
+    end
+  ]]
+
+  --- ### SumT
+  ---`
+  local SumT: type <nickname(#[string.format("Sum(%s)", table.concat(Ts, ", "))]#)> = @record{
+    tag: SumTag,
+    val: SumVal
+  }
+  ---`
+
+  local function tag_tostring(tag: SumTag): string
+    if tag == 0 then
+      return "NULL TAG"
+    end
+    ## for name in pairs(fields) do
+      ## local i = tags[name]
+      if tag == #[i]# then
+        return #[tag_names[i]]#
+      end
+    ## end
+    return ""
+  end
+  
+  --- ### SumT:is
+  ---`
+  function SumT:is(): string
+  ---`
+    return tag_tostring(self.tag)
+  end
+
+  ## for name, node in pairs(fields) do
+    ## local T = node.type
+    ## local tag = tags[name]
+    function SumT.#|name|#(v: #[T]#): SumT
+      local sum_t: SumT
+      sum_t.tag = #[tag]#
+      sum_t.val.#|name|# = v
+      return sum_t
+    end
+
+    --- ### SumT:#|"is_" .. name|#
+    --- Returns a boolean depending on if the object is the defined field 'name'
+    ---`
+    function SumT:#|"is_" .. name|#(): boolean
+    ---`
+      return self.tag == #[tag]#
+    end
+
+    --- ### SumT:#|"get_" .. name|#
+    --- Returns the value of the field 'name' or crashes if the object isn't that tag
+    ---`
+    function SumT:#|"get_" .. name|#(): #[T]#
+    ---`
+      assert(self.tag == #[tag]#, ("Cannot get tag: tag is '%s' not '%s'"):format(self:is(), #[name]#))
+      return self.val.#|name|#
+    end
+
+  ## end
+
+  ## SumT.value.is_sum = true
+  ## SumT.value.subtype = rec
+
+  ## return SumT
+## end
+
+--- ### Sum
+--[[-
+Generic used to instantiate a Sum type in the form of `Sum(rec)`\
+Argument `rec` is the value type that the Sum will represent
+-]]
+---`
+local Sum: type = #[generalize(make_sum)]#
+---`
+
+--- ### Variant.Sum
+--- Variant module namespacing of the Sum generic
+---`
+local Variant.Sum = Sum
+---`
+
+## local function make_option(T)
+  ## static_assert(traits.is_type(T), "invalid type '%s'", T)
+  local T: type = @#[T]#
+
+  --- ### OptionT
+  ---`
+  local OptionT: type <nickname(#[string.format("Option(%s)", T)]#)> = @Sum(record{
+    some: T,
+    none: niltype
+  })
+  ---`
+
+  ## OptionT.value.is_option = true
+  ## OptionT.value.subtype = T
+
+  --- ### OptionT:get
+  --- Returns the some field value or crashes if it is none
+  ---`
+  function OptionT:get(): T
+  ---`
+    return self:get_some()
+  end
+
+  local option_convert_concept = #[concept(function(t)
+    if t.type == T then return true end
+    if t.type.is_niltype then return true end
+    if t.type.is_option and t.type.subtype.is_niltype then return true end
+    return false
+  end)]#
+
+  --- ### OptionT:get
+  --- Metafield to allow passing direct values to options instead of wrapping them in a 'Some'
+  ---`
+  function OptionT.__convert(n: option_convert_concept)
+  ---`
+    ## if n.type.is_option or n.type.is_niltype then
+      return OptionT.none()
+    ## elseif n.type == T then
+      return OptionT.some(n)
+    ## else static_error(("Cannot convert type '%s' to type '%s'"):format(n.type, OptionT.value)) end
+  end
+
+  ## return OptionT
+## end
+
+--- ### Option
+--[[-
+Generic used to instantiate a Option type in the form of `Option(T)`\
+Argument `T` is the value type that the Option will represent
+-]]
+---`
+local Option: type = #[generalize(make_option)]#
+---`
+
+--- ### Option.Some
+--- Creates an Option object with the subtype of `v`'s type
+---`
+function Option.Some(v: auto): Option(#[v.type]#)
+---`
+  ## static_assert(not v.type.is_niltype, "Param 'v' cannot be a 'niltype'")
+  return (@Option(#[v.type]#)).some(v)
+end
+
+--- ### Option.Some
+--- Returns an Option object with `niltype` as it's subtype
+---`
+function Option.None(): Option(niltype)
+---`
+  return (@Option(niltype)).none()
+end
+
+--- ### Variant.Option
+--- Variant module namespacing of the Option generic
+---`
+local Variant.Option = Option
+---`
+
+## local function make_result(T, E)
+  ## static_assert(traits.is_type(T), "invalid type '%s'", T)
+  ## static_assert(traits.is_type(E), "invalid type '%s'", E)
+  local T: type = @#[T]#
+  local E: type = @#[E]#
+
+  --- ### ResultT
+  ---`
+  local ResultT: type <nickname(#[string.format("Result(%s, %s)", T, E)]#)> = @Sum(record{
+    ok: T,
+    err: E
+  })
+  ---`
+
+  ## ResultT.value.is_result = true
+  ## ResultT.value.subtype = nil
+  ## ResultT.value.ok = T
+  ## ResultT.value.err = E
+
+  --- ### ResultT:get
+  --- Returns the value of `ok` or crashes
+  ---`
+  function ResultT:get(): T
+  ---`
+    return self:get_ok()
+  end
+
+  ## return ResultT
+## end
+
+--- ### Result
+--[[-
+Generic used to instantiate a Result type in the form of `Result(T, E)`\
+Argument `T` is the value type of the `ok` field\
+Argument `E` is the value type of the `err` field
+-]]
+---`
+local Result: type = #[generalize(make_result)]#
+---`
+
+--- ### Variant.Result
+--- Variant module namespacing of the Result generic
+---`
+local Variant.Result = Result
+---`
+
+return Variant
